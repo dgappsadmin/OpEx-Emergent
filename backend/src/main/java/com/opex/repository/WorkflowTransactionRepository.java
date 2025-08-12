@@ -16,6 +16,15 @@ public interface WorkflowTransactionRepository extends JpaRepository<WorkflowTra
     
     List<WorkflowTransaction> findByStatusOrderByActionDateDesc(String status);
     
+    // NEW: Find by initiative ID
+    List<WorkflowTransaction> findByInitiative_IdOrderByStageNumberAsc(Long initiativeId);
+    
+    // NEW: Find by site
+    List<WorkflowTransaction> findBySiteOrderByActionDateDesc(String site);
+    
+    // NEW: Find by initiative and site
+    List<WorkflowTransaction> findByInitiative_IdAndSiteOrderByStageNumberAsc(Long initiativeId, String site);
+    
     @Query("SELECT wt FROM WorkflowTransaction wt WHERE wt.workflowId = :workflowId AND wt.stageNumber = :stageNumber")
     List<WorkflowTransaction> findByWorkflowIdAndStageNumber(@Param("workflowId") String workflowId, @Param("stageNumber") Integer stageNumber);
     
@@ -24,4 +33,8 @@ public interface WorkflowTransactionRepository extends JpaRepository<WorkflowTra
     
     @Query("SELECT wt FROM WorkflowTransaction wt WHERE wt.workflowId = :workflowId ORDER BY wt.stageNumber ASC, wt.actionDate DESC")
     List<WorkflowTransaction> findWorkflowHistory(@Param("workflowId") String workflowId);
+    
+    // NEW: Find pending transactions by site and role
+    @Query("SELECT wt FROM WorkflowTransaction wt WHERE wt.site = :site AND wt.status = 'PENDING' ORDER BY wt.createdAt ASC")
+    List<WorkflowTransaction> findPendingTransactionsBySite(@Param("site") String site);
 }

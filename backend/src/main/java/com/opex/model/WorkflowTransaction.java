@@ -13,6 +13,15 @@ public class WorkflowTransaction {
     @Column(name = "workflow_id")
     private String workflowId;
 
+    // NEW: Add initiative_id as foreign key
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "initiative_id", nullable = false)  
+    private Initiative initiative;
+
+    // NEW: Add site field
+    @Column(name = "site", nullable = false, length = 10)
+    private String site;
+
     @Column(name = "stage_number")
     private Integer stageNumber;
 
@@ -72,6 +81,12 @@ public class WorkflowTransaction {
 
     public String getWorkflowId() { return workflowId; }
     public void setWorkflowId(String workflowId) { this.workflowId = workflowId; }
+
+    public Initiative getInitiative() { return initiative; }
+    public void setInitiative(Initiative initiative) { this.initiative = initiative; }
+
+    public String getSite() { return site; }
+    public void setSite(String site) { this.site = site; }
 
     public Integer getStageNumber() { return stageNumber; }
     public void setStageNumber(Integer stageNumber) { this.stageNumber = stageNumber; }

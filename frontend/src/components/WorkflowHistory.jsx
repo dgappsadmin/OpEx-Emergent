@@ -1,59 +1,56 @@
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
-import { 
-  CheckCircle, 
-  XCircle, 
-  Clock, 
-  User, 
-  MessageSquare,
-  Calendar,
-  ArrowDown
-} from 'lucide-react';
+import { CheckCircle, Clock, XCircle, AlertCircle, User, Calendar, MessageSquare } from 'lucide-react';
 import { workflowAPI } from '../services/api';
 
 const WorkflowHistory = ({ initiativeId }) => {
   const [transactions, setTransactions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    const fetchTransactions = async () => {
-      if (!initiativeId) return;
-      
-      try {
-        setLoading(true);
-        const response = await workflowAPI.getTransactions(initiativeId);
-        setTransactions(response.data || []);
-      } catch (error) {
-        console.error('Error fetching workflow history:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTransactions();
+    if (initiativeId) {
+      fetchWorkflowHistory();
+    }
   }, [initiativeId]);
 
+  const fetchWorkflowHistory = async () => {
+    try {
+      setLoading(true);
+      const response = await workflowAPI.getTransactions(initiativeId);
+      setTransactions(response.data || []);
+    } catch (error) {
+      console.error('Error fetching workflow history:', error);
+      setError('Failed to load workflow history');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const getStatusIcon = (status) => {
-    switch (status.toLowerCase()) {
-      case 'approved':
-        return <CheckCircle className="h-5 w-5 text-green-500" />;
-      case 'rejected':
-        return <XCircle className="h-5 w-5 text-red-500" />;
-      case 'pending':
-        return <Clock className="h-5 w-5 text-orange-500" />;
+    switch (status?.toUpperCase()) {
+      case 'APPROVED':
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case 'REJECTED':
+        return <XCircle className="h-4 w-4 text-red-500" />;
+      case 'PENDING':
+        return <Clock className="h-4 w-4 text-orange-500" />;
+      case 'COMPLETED':
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
       default:
-        return <Clock className="h-5 w-5 text-gray-400" />;
+        return <AlertCircle className="h-4 w-4 text-gray-400" />;
     }
   };
 
   const getStatusColor = (status) => {
-    switch (status.toLowerCase()) {
-      case 'approved':
+    switch (status?.toUpperCase()) {
+      case 'APPROVED':
+      case 'COMPLETED':
         return 'bg-green-100 text-green-800 border-green-200';
-      case 'rejected':
+      case 'REJECTED':
         return 'bg-red-100 text-red-800 border-red-200';
-      case 'pending':
+      case 'PENDING':
         return 'bg-orange-100 text-orange-800 border-orange-200';
       default:
         return 'bg-gray-100 text-gray-600 border-gray-200';
@@ -62,13 +59,18 @@ const WorkflowHistory = ({ initiativeId }) => {
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    try {
+      const date = new Date(dateString);
+      return date.toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      });
+    } catch (error) {
+      return 'Invalid Date';
+    }
   };
 
   if (loading) {
@@ -78,8 +80,29 @@ const WorkflowHistory = ({ initiativeId }) => {
           <CardTitle className="text-lg">Workflow History</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="flex items-center justify-center p-4">
+          <div className="flex items-center justify-center py-8">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Workflow History</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <p className="text-red-600 mb-4">{error}</p>
+            <button 
+              onClick={fetchWorkflowHistory}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm"
+            >
+              Retry
+            </button>
           </div>
         </CardContent>
       </Card>
@@ -89,92 +112,99 @@ const WorkflowHistory = ({ initiativeId }) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg flex items-center space-x-2">
-          <MessageSquare className="h-5 w-5" />
-          <span>Workflow Transaction History</span>
-        </CardTitle>
+        <CardTitle className="text-lg">Workflow History</CardTitle>
       </CardHeader>
       <CardContent>
         {transactions.length === 0 ? (
-          <p className="text-gray-500 text-center py-4">No workflow history available</p>
+          <div className="text-center py-8">
+            <p className="text-slate-500">No workflow history available</p>
+          </div>
         ) : (
           <div className="space-y-4">
             {transactions.map((transaction, index) => (
-              <div key={transaction.id} className="relative">
-                {/* Timeline connector */}
-                {index < transactions.length - 1 && (
-                  <div className="absolute left-6 top-12 bottom-0 w-0.5 bg-gray-200"></div>
-                )}
-                
-                <div className="flex space-x-4">
-                  {/* Status Icon */}
-                  <div className="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-full bg-white border-2 border-gray-200">
-                    {getStatusIcon(transaction.status)}
-                  </div>
-                  
-                  {/* Transaction Details */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="flex items-center space-x-2 mb-2">
-                          <span className="font-medium text-gray-900">
-                            Step {transaction.stageNumber}: {transaction.stageName}
-                          </span>
-                          <Badge className={getStatusColor(transaction.status)}>
-                            {transaction.status}
-                          </Badge>
-                        </div>
-                        
-                        {/* Action Details */}
-                        <div className="text-sm text-gray-600 space-y-1">
-                          <div className="flex items-center space-x-2">
-                            <User className="h-4 w-4" />
-                            <span>Action by: {transaction.actionBy || 'System'}</span>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <Calendar className="h-4 w-4" />
-                            <span>Date: {formatDate(transaction.actionDate)}</span>
-                          </div>
-                          {transaction.pendingWith && (
-                            <div className="flex items-center space-x-2">
-                              <ArrowDown className="h-4 w-4" />
-                              <span>Pending with: {transaction.pendingWith}</span>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Comments */}
-                        {transaction.comment && (
-                          <div className="mt-2 p-3 bg-gray-50 rounded-lg">
-                            <p className="text-sm text-gray-700">
-                              <MessageSquare className="h-4 w-4 inline mr-2" />
-                              {transaction.comment}
-                            </p>
-                          </div>
-                        )}
-
-                        {/* Additional Details */}
-                        <div className="mt-2 space-y-1">
-                          {transaction.mocRequired !== null && (
-                            <div className="text-xs text-gray-500">
-                              MOC Required: {transaction.mocRequired ? 'Yes' : 'No'}
-                              {transaction.mocNumber && ` (${transaction.mocNumber})`}
-                            </div>
-                          )}
-                          {transaction.capexRequired !== null && (
-                            <div className="text-xs text-gray-500">
-                              CAPEX Required: {transaction.capexRequired ? 'Yes' : 'No'}
-                            </div>
-                          )}
-                          {transaction.initiativeLead && (
-                            <div className="text-xs text-gray-500">
-                              Initiative Lead: {transaction.initiativeLead}
-                            </div>
-                          )}
-                        </div>
-                      </div>
+              <div key={transaction.id || index} className="border rounded-lg p-4 bg-slate-50">
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center space-x-3">
+                    <div className="flex items-center justify-center w-8 h-8 rounded-full bg-blue-100">
+                      <span className="text-blue-600 font-semibold text-sm">
+                        {transaction.stageNumber || 'N/A'}
+                      </span>
+                    </div>
+                    <div>
+                      <h4 className="font-medium text-slate-800">
+                        {transaction.stageName || 'Unknown Stage'}
+                      </h4>
+                      <p className="text-sm text-slate-600">
+                        Step {transaction.stageNumber || 'N/A'} of 5
+                      </p>
                     </div>
                   </div>
+                  <Badge className={getStatusColor(transaction.status)}>
+                    {getStatusIcon(transaction.status)}
+                    <span className="ml-1">{transaction.status || 'Unknown'}</span>
+                  </Badge>
+                </div>
+
+                {/* Transaction Details */}
+                <div className="space-y-2 text-sm">
+                  {transaction.comment && (
+                    <div className="flex items-start space-x-2">
+                      <MessageSquare className="h-4 w-4 text-slate-400 mt-0.5 flex-shrink-0" />
+                      <p className="text-slate-700">{transaction.comment}</p>
+                    </div>
+                  )}
+
+                  <div className="flex items-center space-x-4 text-slate-500">
+                    {transaction.actionBy && (
+                      <div className="flex items-center space-x-1">
+                        <User className="h-4 w-4" />
+                        <span>{transaction.actionBy}</span>
+                      </div>
+                    )}
+                    {transaction.actionDate && (
+                      <div className="flex items-center space-x-1">
+                        <Calendar className="h-4 w-4" />
+                        <span>{formatDate(transaction.actionDate)}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Additional Details */}
+                  {(transaction.mocRequired || transaction.capexRequired || transaction.initiativeLead) && (
+                    <div className="mt-3 p-3 bg-blue-50 rounded border border-blue-200">
+                      <h5 className="font-medium text-blue-800 mb-2">Additional Details:</h5>
+                      <div className="space-y-1 text-sm">
+                        {transaction.mocRequired && (
+                          <p className="text-blue-700">
+                            MOC Required: Yes
+                            {transaction.mocNumber && (
+                              <span className="ml-2 font-medium">({transaction.mocNumber})</span>
+                            )}
+                          </p>
+                        )}
+                        {transaction.capexRequired && (
+                          <p className="text-blue-700">
+                            CAPEX Required: Yes
+                            {transaction.capexDetails && (
+                              <span className="block mt-1 text-xs">{transaction.capexDetails}</span>
+                            )}
+                          </p>
+                        )}
+                        {transaction.initiativeLead && (
+                          <p className="text-blue-700">
+                            Initiative Lead: {transaction.initiativeLead}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pending With */}
+                  {transaction.pendingWith && transaction.status === 'PENDING' && (
+                    <div className="mt-2 text-orange-600 text-sm">
+                      Awaiting action from: {transaction.pendingWith}
+                    </div>
+                  )}
                 </div>
               </div>
             ))}

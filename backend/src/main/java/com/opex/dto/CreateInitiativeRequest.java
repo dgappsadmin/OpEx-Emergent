@@ -8,7 +8,9 @@ public class CreateInitiativeRequest {
     private String description;
     private String category;
     private Long siteId;
+    private String siteCode;  // Add siteCode field
     private Long disciplineId;
+    private String disciplineCode;  // Add disciplineCode field
     private String proposer;
     private LocalDate proposalDate;
     private LocalDate expectedClosureDate;
@@ -30,8 +32,14 @@ public class CreateInitiativeRequest {
     public Long getSiteId() { return siteId; }
     public void setSiteId(Long siteId) { this.siteId = siteId; }
 
+    public String getSiteCode() { return siteCode; }
+    public void setSiteCode(String siteCode) { this.siteCode = siteCode; }
+
     public Long getDisciplineId() { return disciplineId; }
     public void setDisciplineId(Long disciplineId) { this.disciplineId = disciplineId; }
+
+    public String getDisciplineCode() { return disciplineCode; }
+    public void setDisciplineCode(String disciplineCode) { this.disciplineCode = disciplineCode; }
 
     public String getProposer() { return proposer; }
     public void setProposer(String proposer) { this.proposer = proposer; }

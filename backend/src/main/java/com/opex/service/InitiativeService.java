@@ -4,26 +4,40 @@ import com.opex.model.Initiative;
 import com.opex.model.InitiativeSite;
 import com.opex.model.InitiativeDiscipline;
 import com.opex.model.WorkflowStep;
+import com.opex.model.WorkflowTransaction;
 import com.opex.model.Stage;
 import com.opex.repository.InitiativeRepository;
+import com.opex.repository.InitiativeSiteRepository;
+import com.opex.repository.InitiativeDisciplineRepository;
 import com.opex.repository.WorkflowStepRepository;
+import com.opex.repository.WorkflowTransactionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import java.util.ArrayList;
+import java.util.Collections;
 
 @Service
 public class InitiativeService {
 
     @Autowired
     private InitiativeRepository initiativeRepository;
-
+    
+    @Autowired
+    private InitiativeSiteRepository initiativeSiteRepository;
+    
+    @Autowired
+    private InitiativeDisciplineRepository initiativeDisciplineRepository;
+    
     @Autowired
     private WorkflowStepRepository workflowStepRepository;
-
+    
+    @Autowired
+    private WorkflowTransactionRepository workflowTransactionRepository;
+    
     @Autowired
     private StageService stageService;
 
@@ -39,77 +53,82 @@ public class InitiativeService {
         return initiativeRepository.findByInitiativeId(initiativeId);
     }
 
+    public List<Initiative> findByStatus(String status) {
+        return initiativeRepository.findByStatus(status);
+    }
+
+    public List<Initiative> findBySite(String siteCode) {
+        Optional<InitiativeSite> site = initiativeSiteRepository.findByCode(siteCode);
+        if (site.isPresent()) {
+            return initiativeRepository.findBySite(site.get());
+        }
+        return Collections.emptyList(); // Fixed: Use Collections.emptyList() instead of List.of()
+    }
+
+    public long countByStatus(String status) {
+        return initiativeRepository.countByStatus(status);
+    }
+
     @Transactional
     public Initiative save(Initiative initiative) {
-        if (initiative.getInitiativeId() == null || initiative.getInitiativeId().isEmpty()) {
-            initiative.setInitiativeId(generateInitiativeId(initiative));
+        boolean isNewInitiative = initiative.getId() == null;
+        
+        // Generate initiative ID if new
+        if (isNewInitiative && (initiative.getInitiativeId() == null || initiative.getInitiativeId().isEmpty())) {
+            String initiativeId = generateInitiativeId(initiative.getSite());
+            initiative.setInitiativeId(initiativeId);
         }
-        initiative.setUpdatedAt(LocalDateTime.now());
+
+        // Save the initiative
+        Initiative savedInitiative = initiativeRepository.save(initiative);
         
-        Initiative saved = initiativeRepository.save(initiative);
-        
-        // Create initial workflow steps
-        if (saved.getId() != null && workflowStepRepository.findByInitiative_IdOrderByCreatedAtAsc(saved.getId()).isEmpty()) {
-            createInitialWorkflowSteps(saved);
+        // AUTOMATICALLY CREATE WORKFLOW STEPS FOR NEW INITIATIVES
+        if (isNewInitiative) {
+            createWorkflowStepsForInitiative(savedInitiative);
         }
         
-        return saved;
+        return savedInitiative;
     }
 
-    private String generateInitiativeId(Initiative initiative) {
-        // Format: ZZZ/YY/XX/AB/123
-        // ZZZ = Site Code (Unit Code)
-        // YY = Year (last 2 digits)
-        // XX = Discipline Code
-        // AB = Category-specific sequential number for site (01, 02...)
-        // 123 = Overall site-specific initiative number (001, 002...)
-        
-        String siteCode = initiative.getSite().getCode();
-        String year = String.valueOf(LocalDateTime.now().getYear()).substring(2); // Last 2 digits
-        String disciplineCode = initiative.getDiscipline().getCode();
-        
-        // Get count for this site and discipline combination in current year
-        Long disciplineCount = getNextDisciplineSequence(siteCode, disciplineCode, Integer.parseInt("20" + year));
-        String disciplineSeq = String.format("%02d", disciplineCount);
-        
-        // Get overall count for this site in current year
-        Long overallCount = getNextOverallSequence(siteCode, Integer.parseInt("20" + year));
-        String overallSeq = String.format("%03d", overallCount);
-        
-        return String.format("%s/%s/%s/%s/%s", siteCode, year, disciplineCode, disciplineSeq, overallSeq);
-    }
-
-    private Long getNextDisciplineSequence(String siteCode, String disciplineCode, int year) {
-        // Count initiatives for this site-discipline combination in the current year
-        return initiativeRepository.countBySiteCodeAndDisciplineCodeAndYear(siteCode, disciplineCode, year) + 1;
-    }
-
-    private Long getNextOverallSequence(String siteCode, int year) {
-        // Count all initiatives for this site in the current year
-        return initiativeRepository.countBySiteCodeAndYear(siteCode, year) + 1;
-    }
-
-    private void createInitialWorkflowSteps(Initiative initiative) {
-        // Get the first 7 stages (as per requirement to work till step 7)
+    @Transactional
+    private void createWorkflowStepsForInitiative(Initiative initiative) {
+        // Get all 5 stages in order
         List<Stage> stages = stageService.findAllActiveOrdered();
-        if (stages.size() > 7) {
-            stages = stages.subList(0, 7);
+        if (stages.size() >= 5) {
+            stages = stages.subList(0, 5); // Take first 5 stages
         }
         
         for (int i = 0; i < stages.size(); i++) {
             Stage stage = stages.get(i);
+            
+            // Create workflow step
             WorkflowStep step = new WorkflowStep();
             step.setInitiative(initiative);
-            step.setStage(stage); // Now using Stage object instead of String
+            step.setStage(stage);
             step.setStepNumber(i + 1);
             step.setApprover(getApproverForStage(stage, initiative));
-            step.setStatus(i == 0 ? "pending" : "waiting");
+            step.setStatus(i == 0 ? "pending" : "waiting"); // First step is pending, others waiting
             workflowStepRepository.save(step);
+            
+            // Create initial workflow transaction for first step
+            if (i == 0) {
+                WorkflowTransaction transaction = new WorkflowTransaction();
+                transaction.setWorkflowId(initiative.getInitiativeId());
+                transaction.setInitiative(initiative);
+                transaction.setSite(initiative.getSite().getCode());
+                transaction.setStageNumber(1);
+                transaction.setStageName(stage.getActivity());
+                transaction.setStatus("PENDING");
+                transaction.setComment("Workflow initialized - awaiting " + stage.getResponsibility() + " action");
+                transaction.setActionBy("system");
+                transaction.setActionDate(LocalDateTime.now());
+                transaction.setPendingWith(getApproverForStage(stage, initiative));
+                workflowTransactionRepository.save(transaction);
+            }
         }
     }
-
+    
     private String getApproverForStage(Stage stage, Initiative initiative) {
-        // Map stage role codes to actual approver emails
         String siteCode = initiative.getSite().getCode().toLowerCase();
         String roleCode = stage.getRoleCode();
         
@@ -129,24 +148,18 @@ public class InitiativeService {
         }
     }
 
-    public List<Initiative> findByStatus(String status) {
-        return initiativeRepository.findByStatus(status);
+    private String generateInitiativeId(InitiativeSite site) {
+        String siteCode = site.getCode();
+        long count = initiativeRepository.count() + 1;
+        return siteCode + "-INI-" + String.format("%04d", count);
     }
 
-    public List<Initiative> findBySiteCode(String siteCode) {
-        return initiativeRepository.findBySiteCode(siteCode);
-    }
-
-    public Long countByStatus(String status) {
-        return initiativeRepository.countByStatus(status);
-    }
-
-    public Double getTotalExpectedValue() {
-        Double total = initiativeRepository.getTotalExpectedValue();
-        return total != null ? total : 0.0;
-    }
-
-    public void delete(Long id) {
+    public void deleteById(Long id) {
         initiativeRepository.deleteById(id);
+    }
+
+    public double getTotalEstimatedSavings() {
+        Double total = initiativeRepository.sumEstimatedSavings();
+        return total != null ? total : 0.0;
     }
 }

@@ -2,107 +2,169 @@ import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
 import { Badge } from './ui/badge';
 import { 
-  CheckCircle, 
+  FileText, 
   Clock, 
-  AlertTriangle, 
-  TrendingUp,
-  Users,
-  Target
+  CheckCircle, 
+  XCircle, 
+  DollarSign,
+  TrendingUp
 } from 'lucide-react';
 
-const WorkflowSummary = ({ initiatives, user }) => {
-  // Calculate workflow statistics
-  const myActions = initiatives.filter(initiative => {
-    // This would need to be enhanced with proper user role checking
-    return initiative.status === 'PROPOSED' || initiative.status === 'IN_PROGRESS';
-  });
-
-  const completedInitiatives = initiatives.filter(i => i.status === 'COMPLETED');
-  const inProgressInitiatives = initiatives.filter(i => i.status === 'IN_PROGRESS');
-  const pendingInitiatives = initiatives.filter(i => i.status === 'PROPOSED');
-
+const WorkflowSummary = ({ initiatives = [], user = {} }) => {
+  // Calculate statistics
+  const totalInitiatives = initiatives.length;
+  const proposedInitiatives = initiatives.filter(i => i.status === 'PROPOSED').length;
+  const inProgressInitiatives = initiatives.filter(i => i.status === 'IN_PROGRESS').length;
+  const completedInitiatives = initiatives.filter(i => i.status === 'COMPLETED').length;
+  const rejectedInitiatives = initiatives.filter(i => i.status === 'REJECTED').length;
+  
   const totalSavings = initiatives.reduce((sum, i) => sum + (i.estimatedSavings || 0), 0);
-  const completedSavings = completedInitiatives.reduce((sum, i) => sum + (i.estimatedSavings || 0), 0);
+  const completedSavings = initiatives
+    .filter(i => i.status === 'COMPLETED')
+    .reduce((sum, i) => sum + (i.estimatedSavings || 0), 0);
 
-  const completionRate = initiatives.length > 0 ? (completedInitiatives.length / initiatives.length * 100) : 0;
+  // Calculate user-specific metrics
+  const userSiteInitiatives = initiatives.filter(i => 
+    i.site?.code === user.siteCode || i.siteCode === user.siteCode
+  );
 
-  const stats = [
-    {
-      title: 'My Pending Actions',
-      value: myActions.length,
-      icon: Clock,
-      color: 'text-orange-600',
-      bgColor: 'bg-orange-100',
-      description: 'Items requiring your attention'
-    },
-    {
-      title: 'Completion Rate',
-      value: `${completionRate.toFixed(1)}%`,
-      icon: Target,
-      color: 'text-green-600',
-      bgColor: 'bg-green-100',
-      description: 'Overall completion percentage'
-    },
-    {
-      title: 'Total Savings',
-      value: `₹${(totalSavings / 1000).toFixed(0)}K`,
-      icon: TrendingUp,
-      color: 'text-blue-600',
-      bgColor: 'bg-blue-100',
-      description: 'Expected cost savings'
-    },
-    {
-      title: 'Active Workflows',
-      value: inProgressInitiatives.length,
-      icon: Users,
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-100',
-      description: 'Currently in progress'
-    }
-  ];
+  const completionRate = totalInitiatives > 0 ? 
+    Math.round((completedInitiatives / totalInitiatives) * 100) : 0;
 
   return (
-    <Card className="mb-6">
+    <Card className="bg-gradient-to-br from-blue-50 to-indigo-100 border-blue-200">
       <CardHeader>
-        <CardTitle className="text-lg">Workflow Overview</CardTitle>
+        <CardTitle className="text-xl font-bold text-slate-800 flex items-center">
+          <TrendingUp className="mr-2 h-6 w-6 text-blue-600" />
+          Workflow Summary
+        </CardTitle>
+        <p className="text-slate-600">
+          Overview of all initiatives and workflow progress
+        </p>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {stats.map((stat, index) => {
-            const IconComponent = stat.icon;
-            return (
-              <div key={index} className="text-center">
-                <div className={`w-12 h-12 ${stat.bgColor} rounded-lg flex items-center justify-center mx-auto mb-2`}>
-                  <IconComponent className={`h-6 w-6 ${stat.color}`} />
-                </div>
-                <div className="text-2xl font-bold text-gray-900">{stat.value}</div>
-                <div className="text-sm font-medium text-gray-700">{stat.title}</div>
-                <div className="text-xs text-gray-500">{stat.description}</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {/* Total Initiatives */}
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-600">Total</p>
+                <p className="text-2xl font-bold text-slate-800">{totalInitiatives}</p>
               </div>
-            );
-          })}
+              <FileText className="h-8 w-8 text-blue-500" />
+            </div>
+          </div>
+
+          {/* Pending */}
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-600">Pending</p>
+                <p className="text-2xl font-bold text-orange-600">
+                  {proposedInitiatives + inProgressInitiatives}
+                </p>
+              </div>
+              <Clock className="h-8 w-8 text-orange-500" />
+            </div>
+          </div>
+
+          {/* Completed */}
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-600">Completed</p>
+                <p className="text-2xl font-bold text-green-600">{completedInitiatives}</p>
+              </div>
+              <CheckCircle className="h-8 w-8 text-green-500" />
+            </div>
+          </div>
+
+          {/* Rejected */}
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-600">Rejected</p>
+                <p className="text-2xl font-bold text-red-600">{rejectedInitiatives}</p>
+              </div>
+              <XCircle className="h-8 w-8 text-red-500" />
+            </div>
+          </div>
         </div>
 
-        {/* Quick Status Breakdown */}
-        <div className="mt-6 pt-4 border-t">
-          <div className="flex items-center justify-between text-sm">
-            <div className="flex items-center space-x-4">
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                <span>Completed: {completedInitiatives.length}</span>
+        {/* Financial Summary */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-600">Total Expected Savings</p>
+                <p className="text-xl font-bold text-slate-800">
+                  ₹{totalSavings.toLocaleString()}
+                </p>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-blue-500 rounded-full"></div>
-                <span>In Progress: {inProgressInitiatives.length}</span>
+              <DollarSign className="h-6 w-6 text-green-500" />
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-600">Realized Savings</p>
+                <p className="text-xl font-bold text-green-600">
+                  ₹{completedSavings.toLocaleString()}
+                </p>
               </div>
-              <div className="flex items-center space-x-2">
-                <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                <span>Pending: {pendingInitiatives.length}</span>
+              <CheckCircle className="h-6 w-6 text-green-500" />
+            </div>
+          </div>
+
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-slate-600">Completion Rate</p>
+                <p className="text-xl font-bold text-blue-600">{completionRate}%</p>
+              </div>
+              <TrendingUp className="h-6 w-6 text-blue-500" />
+            </div>
+          </div>
+        </div>
+
+        {/* User-Specific Information */}
+        {user.siteCode && (
+          <div className="bg-white p-4 rounded-lg shadow-sm">
+            <h4 className="font-medium text-slate-800 mb-3">Your Site Overview</h4>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-sm text-slate-600">Site Initiatives</p>
+                <p className="text-lg font-bold text-slate-800">{userSiteInitiatives.length}</p>
+              </div>
+              <div>
+                <p className="text-sm text-slate-600">Your Role</p>
+                <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">
+                  {user.roleName || user.roleCode || 'N/A'}
+                </Badge>
               </div>
             </div>
-            <Badge variant="outline" className="text-xs">
-              Total: {initiatives.length} initiatives
+          </div>
+        )}
+
+        {/* Status Breakdown */}
+        <div className="bg-white p-4 rounded-lg shadow-sm mt-4">
+          <h4 className="font-medium text-slate-800 mb-3">Status Breakdown</h4>
+          <div className="flex flex-wrap gap-2">
+            <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+              Proposed: {proposedInitiatives}
             </Badge>
+            <Badge className="bg-blue-100 text-blue-800 border-blue-200">
+              In Progress: {inProgressInitiatives}
+            </Badge>
+            <Badge className="bg-green-100 text-green-800 border-green-200">
+              Completed: {completedInitiatives}
+            </Badge>
+            {rejectedInitiatives > 0 && (
+              <Badge className="bg-red-100 text-red-800 border-red-200">
+                Rejected: {rejectedInitiatives}
+              </Badge>
+            )}
           </div>
         </div>
       </CardContent>
