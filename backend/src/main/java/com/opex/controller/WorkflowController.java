@@ -1,13 +1,17 @@
 package com.opex.controller;
 
 import com.opex.model.WorkflowStep;
+import com.opex.model.WorkflowTransaction;
 import com.opex.service.WorkflowService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Optional;
 import java.util.Map;
+import java.util.HashMap;
 
 @CrossOrigin(origins = "*", maxAge = 3600)
 @RestController
@@ -18,8 +22,19 @@ public class WorkflowController {
     private WorkflowService workflowService;
 
     @GetMapping("/initiative/{initiativeId}")
-    public List<WorkflowStep> getWorkflowByInitiativeId(@PathVariable Long initiativeId) {
-        return workflowService.findByInitiativeId(initiativeId);
+    public ResponseEntity<List<WorkflowStep>> getWorkflowByInitiativeId(@PathVariable Long initiativeId) {
+        List<WorkflowStep> steps = workflowService.findByInitiativeId(initiativeId);
+        
+        // If no workflow steps exist, create them
+        if (steps.isEmpty()) {
+            try {
+                steps = workflowService.createWorkflowStepsForInitiative(initiativeId);
+            } catch (Exception e) {
+                return ResponseEntity.badRequest().build();
+            }
+        }
+        
+        return ResponseEntity.ok(steps);
     }
 
     @GetMapping("/status/{status}")
@@ -39,34 +54,49 @@ public class WorkflowController {
             @RequestBody Map<String, Object> requestData) {
         
         String comments = (String) requestData.get("comments");
-        String signature = (String) requestData.get("signature");
+        String signature = getCurrentUser(); // Get current user from security context
+        
+        // Prepare additional data
+        Map<String, Object> additionalData = new HashMap<>();
         
         // Handle MOC data
-        Boolean mocRequired = (Boolean) requestData.get("mocRequired");
-        String mocNumber = (String) requestData.get("mocNumber");
+        if (requestData.containsKey("mocRequired")) {
+            additionalData.put("mocRequired", requestData.get("mocRequired"));
+        }
+        if (requestData.containsKey("mocNumber")) {
+            additionalData.put("mocNumber", requestData.get("mocNumber"));
+        }
         
         // Handle CAPEX data
-        Boolean capexRequired = (Boolean) requestData.get("capexRequired");
-        String capexDetails = (String) requestData.get("capexDetails");
+        if (requestData.containsKey("capexRequired")) {
+            additionalData.put("capexRequired", requestData.get("capexRequired"));
+        }
+        if (requestData.containsKey("capexDetails")) {
+            additionalData.put("capexDetails", requestData.get("capexDetails"));
+        }
         
-        // Update the workflow step with additional data
+        // Handle Initiative Lead selection
+        if (requestData.containsKey("initiativeLead")) {
+            additionalData.put("initiativeLead", requestData.get("initiativeLead"));
+        }
+        
+        // Update the workflow step with additional data first
         Optional<WorkflowStep> stepOpt = workflowService.findById(stepId);
         if (stepOpt.isPresent()) {
             WorkflowStep step = stepOpt.get();
             
-            // Set MOC data if provided
-            if (mocRequired != null) {
-                step.setMocRequired(mocRequired);
-                if (mocRequired && mocNumber != null) {
-                    step.setMocNumber(mocNumber);
+            // Set additional data on the step
+            if (additionalData.containsKey("mocRequired")) {
+                step.setMocRequired((Boolean) additionalData.get("mocRequired"));
+                if ((Boolean) additionalData.get("mocRequired") && additionalData.containsKey("mocNumber")) {
+                    step.setMocNumber((String) additionalData.get("mocNumber"));
                 }
             }
             
-            // Set CAPEX data if provided
-            if (capexRequired != null) {
-                step.setCapexRequired(capexRequired);
-                if (capexRequired && capexDetails != null) {
-                    step.setCapexDetails(capexDetails);
+            if (additionalData.containsKey("capexRequired")) {
+                step.setCapexRequired((Boolean) additionalData.get("capexRequired"));
+                if ((Boolean) additionalData.get("capexRequired") && additionalData.containsKey("capexDetails")) {
+                    step.setCapexDetails((String) additionalData.get("capexDetails"));
                 }
             }
             
@@ -74,7 +104,8 @@ public class WorkflowController {
             workflowService.save(step);
         }
         
-        WorkflowStep approvedStep = workflowService.approveStep(stepId, comments, signature);
+        // Approve the step with transaction logging
+        WorkflowStep approvedStep = workflowService.approveStep(stepId, comments, signature, additionalData);
         if (approvedStep != null) {
             return ResponseEntity.ok(approvedStep);
         }
@@ -93,6 +124,37 @@ public class WorkflowController {
             return ResponseEntity.ok(rejectedStep);
         }
         return ResponseEntity.notFound().build();
+    }
+
+    @GetMapping("/transactions/{workflowId}")
+    public ResponseEntity<List<WorkflowTransaction>> getWorkflowHistory(@PathVariable String workflowId) {
+        List<WorkflowTransaction> transactions = workflowService.getWorkflowHistory(workflowId);
+        return ResponseEntity.ok(transactions);
+    }
+
+    @GetMapping("/pending/{userEmail}")
+    public ResponseEntity<List<WorkflowTransaction>> getPendingTransactions(@PathVariable String userEmail) {
+        List<WorkflowTransaction> transactions = workflowService.getPendingTransactions(userEmail);
+        return ResponseEntity.ok(transactions);
+    }
+
+    @PostMapping("/create-steps/{initiativeId}")
+    public ResponseEntity<List<WorkflowStep>> createWorkflowSteps(@PathVariable Long initiativeId) {
+        try {
+            List<WorkflowStep> steps = workflowService.createWorkflowStepsForInitiative(initiativeId);
+            return ResponseEntity.ok(steps);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().build();
+        }
+    }
+
+    // Helper method to get current user
+    private String getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.isAuthenticated()) {
+            return authentication.getName();
+        }
+        return "system"; // fallback
     }
 
     @PutMapping("/{id}")

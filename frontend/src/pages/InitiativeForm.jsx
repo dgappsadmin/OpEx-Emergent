@@ -176,7 +176,7 @@ const InitiativeForm = () => {
         <Card className="shadow-lg border-0 bg-gradient-to-br from-white to-blue-50">
           <CardHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-t-lg">
             <CardTitle className="text-2xl font-bold">New OpEx Initiative</CardTitle>
-            <p className="text-blue-100">Submit your operational excellence initiative for approval workflow (Steps 1-7)</p>
+            <p className="text-blue-100">Submit your operational excellence initiative for approval workflow (Steps 1-5)</p>
           </CardHeader>
           
           <CardContent className="p-8">

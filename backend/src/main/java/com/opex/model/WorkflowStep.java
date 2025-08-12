@@ -1,6 +1,7 @@
 package com.opex.model;
 
 import javax.persistence.*;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.time.LocalDateTime;
 
 @Entity
@@ -12,10 +13,12 @@ public class WorkflowStep {
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "initiative_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Initiative initiative;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "stage_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private Stage stage;
 
     private Integer stepNumber;

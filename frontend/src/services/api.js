@@ -100,7 +100,9 @@ export const workflowAPI = {
   getById: (id) => api.get(`/workflow/${id}`),
   approve: (stepId, data) => api.post(`/workflow/${stepId}/approve`, data),
   reject: (stepId, data) => api.post(`/workflow/${stepId}/reject`, data),
-  update: (id, data) => api.put(`/workflow/${id}`, data)
+  update: (id, data) => api.put(`/workflow/${id}`, data),
+  getTransactions: (workflowId) => api.get(`/workflow/transactions/${workflowId}`),
+  getPendingTransactions: (userEmail) => api.get(`/workflow/pending/${userEmail}`)
 };
 
 // KPI APIs

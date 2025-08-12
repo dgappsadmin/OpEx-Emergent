@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import Layout from '../components/Layout';
+import WorkflowHistory from '../components/WorkflowHistory';
+import WorkflowProgress from '../components/WorkflowProgress';
+import WorkflowSummary from '../components/WorkflowSummary';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -20,7 +23,8 @@ import {
   ChevronRight,
   FileText,
   DollarSign,
-  CheckSquare
+  CheckSquare,
+  XCircle
 } from 'lucide-react';
 import { useToast } from '../hooks/use-toast';
 import { initiativeAPI, workflowAPI } from '../services/api';
@@ -132,8 +136,63 @@ const WorkflowManagement = () => {
       const nextStep = getNextStepForInitiative(initiative);
       const stageInfo = WORKFLOW_STAGES.find(s => s.step === nextStep);
       
+      // Validation: Check required fields
+      if (!comment.trim()) {
+        toast({
+          title: 'Validation Error',
+          description: 'Comment is required for all workflow actions.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Step-specific validation
+      if (nextStep === 3 && !selectedInitiativeLead) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please select an Initiative Lead.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (nextStep === 4 && mocRequired === null) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please specify if MOC is required.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (nextStep === 4 && mocRequired && !mocNumber.trim()) {
+        toast({
+          title: 'Validation Error',
+          description: 'MOC Number is required when MOC is needed.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (nextStep === 5 && capexRequired === null) {
+        toast({
+          title: 'Validation Error',
+          description: 'Please specify if CAPEX is required.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      if (nextStep === 5 && capexRequired && !capexDetails.trim()) {
+        toast({
+          title: 'Validation Error',
+          description: 'CAPEX Details are required when CAPEX is needed.',
+          variant: 'destructive'
+        });
+        return;
+      }
+      
       const payload = {
-        action: action,
         comments: comment,
         stepNumber: nextStep,
         stageName: stageInfo.name
@@ -160,8 +219,29 @@ const WorkflowManagement = () => {
         payload.initiativeLead = selectedInitiativeLead;
       }
 
-      // This would call your actual workflow API
-      // await workflowAPI.processStep(initiative.id, payload);
+      // Get the current workflow step ID
+      const workflowResponse = await workflowAPI.getByInitiativeId(initiative.id);
+      const workflowSteps = workflowResponse.data || [];
+      const currentStep = workflowSteps.find(step => 
+        step.stepNumber === nextStep && (step.status === 'pending' || step.status === 'waiting')
+      );
+
+      if (!currentStep) {
+        toast({
+          title: 'Error',
+          description: 'Could not find the current workflow step.',
+          variant: 'destructive'
+        });
+        return;
+      }
+
+      // Call the appropriate API endpoint
+      let response;
+      if (action === 'approve') {
+        response = await workflowAPI.approve(currentStep.id, payload);
+      } else {
+        response = await workflowAPI.reject(currentStep.id, { comments: comment });
+      }
       
       toast({
         title: action === 'approve' ? 'Step Approved!' : 'Step Rejected',
@@ -179,14 +259,14 @@ const WorkflowManagement = () => {
       setSelectedStep(null);
 
       // Refresh data
-      const response = await initiativeAPI.getAll();
-      setInitiatives(response.data || []);
+      const refreshResponse = await initiativeAPI.getAll();
+      setInitiatives(refreshResponse.data || []);
       
     } catch (error) {
       console.error('Error processing approval:', error);
       toast({
         title: 'Error',
-        description: 'Failed to process the approval. Please try again.',
+        description: error.response?.data?.message || 'Failed to process the approval. Please try again.',
         variant: 'destructive'
       });
     }
@@ -322,14 +402,17 @@ const WorkflowManagement = () => {
             </div>
           )}
 
-          {/* Comments */}
-          <div>
-            <Label className="font-medium">Comments:</Label>
+          {/* Comments - Make it more prominent as it's mandatory */}
+          <div className="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+            <Label className="font-medium text-yellow-800">Comments *</Label>
+            <p className="text-sm text-yellow-700 mb-2">Please provide your review comments (mandatory for all actions)</p>
             <Textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              placeholder="Add your review comments..."
-              className="mt-2"
+              placeholder="Enter your detailed review comments here..."
+              className="mt-2 border-yellow-300 focus:border-yellow-500"
+              rows={3}
+              required
             />
           </div>
           
@@ -339,21 +422,24 @@ const WorkflowManagement = () => {
               variant="outline"
               onClick={() => handleApproval(initiative, 'reject')}
               className="flex-1 text-red-600 border-red-300 hover:bg-red-50"
+              disabled={!comment.trim()}
             >
+              <XCircle className="mr-2 h-4 w-4" />
               Reject
             </Button>
             <Button
               onClick={() => handleApproval(initiative, 'approve')}
               className="flex-1 bg-green-600 hover:bg-green-700"
               disabled={
+                !comment.trim() ||
                 (nextStep === 3 && !selectedInitiativeLead) ||
                 (nextStep === 4 && mocRequired === null) ||
-                (nextStep === 4 && mocRequired && !mocNumber) ||
+                (nextStep === 4 && mocRequired && !mocNumber.trim()) ||
                 (nextStep === 5 && capexRequired === null) ||
-                (nextStep === 5 && capexRequired && !capexDetails)
+                (nextStep === 5 && capexRequired && !capexDetails.trim())
               }
             >
-              <Send className="mr-2 h-4 w-4" />
+              <CheckCircle className="mr-2 h-4 w-4" />
               Approve & Continue
             </Button>
           </div>
@@ -391,8 +477,11 @@ const WorkflowManagement = () => {
   }
 
   return (
-    <Layout title="Workflow Management - Steps 1-7">
+    <Layout title="Workflow Management - Steps 1-5">
       <div className="space-y-8">
+        {/* Workflow Summary */}
+        <WorkflowSummary initiatives={initiatives} user={user} />
+
         {/* Overview Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
@@ -402,9 +491,13 @@ const WorkflowManagement = () => {
                   <Clock className="text-white" size={24} />
                 </div>
                 <div>
-                  <p className="text-blue-600 text-sm font-medium">Pending Approvals</p>
+                  <p className="text-blue-600 text-sm font-medium">Pending Actions</p>
                   <p className="text-2xl font-bold text-blue-900">
-                    {initiatives.filter(i => i.status === 'PROPOSED' || i.status === 'IN_PROGRESS').length}
+                    {initiatives.filter(i => {
+                      const nextStep = getNextStepForInitiative(i);
+                      const canApprove = canUserApprove(nextStep, user?.role, user?.site);
+                      return canApprove && (i.status === 'PROPOSED' || i.status === 'IN_PROGRESS');
+                    }).length}
                   </p>
                 </div>
               </div>
@@ -418,9 +511,9 @@ const WorkflowManagement = () => {
                   <CheckCircle className="text-white" size={24} />
                 </div>
                 <div>
-                  <p className="text-green-600 text-sm font-medium">Approved Today</p>
+                  <p className="text-green-600 text-sm font-medium">Completed</p>
                   <p className="text-2xl font-bold text-green-900">
-                    {initiatives.filter(i => i.status === 'APPROVED').length}
+                    {initiatives.filter(i => i.status === 'COMPLETED').length}
                   </p>
                 </div>
               </div>
@@ -434,9 +527,9 @@ const WorkflowManagement = () => {
                   <FileText className="text-white" size={24} />
                 </div>
                 <div>
-                  <p className="text-orange-600 text-sm font-medium">MOC In Progress</p>
+                  <p className="text-orange-600 text-sm font-medium">In Progress</p>
                   <p className="text-2xl font-bold text-orange-900">
-                    {initiatives.filter(i => i.currentStep === 4).length}
+                    {initiatives.filter(i => i.status === 'IN_PROGRESS').length}
                   </p>
                 </div>
               </div>
@@ -450,9 +543,9 @@ const WorkflowManagement = () => {
                   <DollarSign className="text-white" size={24} />
                 </div>
                 <div>
-                  <p className="text-purple-600 text-sm font-medium">CAPEX In Progress</p>
+                  <p className="text-purple-600 text-sm font-medium">Total Savings</p>
                   <p className="text-2xl font-bold text-purple-900">
-                    {initiatives.filter(i => i.currentStep === 5).length}
+                    ₹{initiatives.reduce((total, i) => total + (i.estimatedSavings || 0), 0).toLocaleString()}
                   </p>
                 </div>
               </div>
@@ -504,9 +597,17 @@ const WorkflowManagement = () => {
                         {initiative.initiativeId || initiative.id} • {initiative.proposer} • {initiative.site?.name || initiative.site?.code || 'N/A'}
                       </p>
                     </div>
-                    <Badge className={getStatusColor(initiative.status)}>
-                      {initiative.status}
-                    </Badge>
+                    <div className="flex flex-col items-end space-y-2">
+                      <Badge className={getStatusColor(initiative.status)}>
+                        {initiative.status}
+                      </Badge>
+                      {/* Current Step Badge */}
+                      {stageInfo && (
+                        <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">
+                          Step {nextStep}: {stageInfo.name}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </CardHeader>
 
@@ -514,16 +615,48 @@ const WorkflowManagement = () => {
                   <div className="space-y-4">
                     <p className="text-sm text-slate-700 line-clamp-2">{initiative.description}</p>
                     
-                    {/* Current Step Info */}
+                    {/* Workflow Progress Indicator */}
+                    <div className="mb-4">
+                      <WorkflowProgress 
+                        currentStep={nextStep} 
+                        status={canApprove ? 'pending' : 'waiting'} 
+                      />
+                    </div>
+
+                    {/* Workflow Status Info - Always Visible */}
                     {stageInfo && (
-                      <div className="bg-slate-50 p-3 rounded-lg">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-6 h-6 bg-blue-500 text-white rounded-full flex items-center justify-center text-xs font-bold">
-                            {nextStep}
+                      <div className={`p-3 rounded-lg border-l-4 ${
+                        canApprove 
+                          ? 'bg-green-50 border-green-400' 
+                          : 'bg-orange-50 border-orange-400'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold text-white ${
+                              canApprove ? 'bg-green-500' : 'bg-orange-500'
+                            }`}>
+                              {nextStep}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-slate-800">{stageInfo.name}</p>
+                              <p className="text-xs text-slate-600">
+                                {canApprove 
+                                  ? `Ready for your action (${stageInfo.responsibility})`
+                                  : `Pending with: ${stageInfo.responsibility}`
+                                }
+                              </p>
+                            </div>
                           </div>
-                          <div>
-                            <p className="text-sm font-medium text-slate-800">{stageInfo.name}</p>
-                            <p className="text-xs text-slate-600">Assigned to: {stageInfo.responsibility}</p>
+                          <div className="text-right">
+                            {canApprove ? (
+                              <span className="text-xs bg-green-100 text-green-800 px-2 py-1 rounded-full">
+                                Action Required
+                              </span>
+                            ) : (
+                              <span className="text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded-full">
+                                Waiting
+                              </span>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -555,50 +688,80 @@ const WorkflowManagement = () => {
                             View Details
                           </Button>
                         </DialogTrigger>
-                        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                        <DialogContent className="max-w-6xl max-h-[80vh] overflow-y-auto">
                           <DialogHeader>
                             <DialogTitle className="text-xl">{initiative.title}</DialogTitle>
                           </DialogHeader>
                           
-                          <div className="space-y-6">
-                            <div className="grid grid-cols-2 gap-4 text-sm">
-                              <div>
-                                <Label className="font-medium">Initiative ID:</Label>
-                                <p>{initiative.initiativeId || initiative.id}</p>
-                              </div>
-                              <div>
-                                <Label className="font-medium">Current Step:</Label>
-                                <p>Step {nextStep}: {stageInfo?.name}</p>
-                              </div>
-                              <div>
-                                <Label className="font-medium">Site:</Label>
-                                <p>{initiative.site?.name || initiative.site?.code || 'N/A'}</p>
-                              </div>
-                              <div>
-                                <Label className="font-medium">Expected Savings:</Label>
-                                <p>₹{initiative.estimatedSavings?.toLocaleString() || 'N/A'}</p>
-                              </div>
+                          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Initiative Details */}
+                            <div className="space-y-4">
+                              <Card>
+                                <CardHeader>
+                                  <CardTitle className="text-lg">Initiative Details</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                  <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                      <Label className="font-medium">Initiative ID:</Label>
+                                      <p>{initiative.initiativeId || initiative.id}</p>
+                                    </div>
+                                    <div>
+                                      <Label className="font-medium">Current Step:</Label>
+                                      <p>Step {nextStep}: {stageInfo?.name}</p>
+                                    </div>
+                                    <div>
+                                      <Label className="font-medium">Site:</Label>
+                                      <p>{initiative.site?.name || initiative.site?.code || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                      <Label className="font-medium">Expected Savings:</Label>
+                                      <p>₹{initiative.estimatedSavings?.toLocaleString() || 'N/A'}</p>
+                                    </div>
+                                    <div>
+                                      <Label className="font-medium">Priority:</Label>
+                                      <p>{initiative.priority || 'Medium'}</p>
+                                    </div>
+                                    <div>
+                                      <Label className="font-medium">Status:</Label>
+                                      <Badge className={getStatusColor(initiative.status)}>
+                                        {initiative.status}
+                                      </Badge>
+                                    </div>
+                                  </div>
+                                  
+                                  <div>
+                                    <Label className="font-medium">Description:</Label>
+                                    <p className="text-sm text-slate-700 mt-1">{initiative.description}</p>
+                                  </div>
+                                </CardContent>
+                              </Card>
                             </div>
-                            
+
+                            {/* Workflow History */}
                             <div>
-                              <Label className="font-medium">Description:</Label>
-                              <p className="text-sm text-slate-700 mt-1">{initiative.description}</p>
+                              <WorkflowHistory initiativeId={initiative.initiativeId || initiative.id} />
                             </div>
                           </div>
                         </DialogContent>
                       </Dialog>
 
-                      {canApprove && (
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button size="sm" className="flex-1 bg-blue-600 hover:bg-blue-700">
-                              <CheckSquare className="mr-2 h-4 w-4" />
-                              Process Step {nextStep}
-                            </Button>
-                          </DialogTrigger>
-                          {renderApprovalDialog(initiative)}
-                        </Dialog>
-                      )}
+                      {/* Always show Take Action button, but enable/disable based on permissions */}
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button 
+                            size="sm" 
+                            className={`flex-1 ${canApprove 
+                              ? 'bg-blue-600 hover:bg-blue-700' 
+                              : 'bg-gray-400 cursor-not-allowed'}`}
+                            disabled={!canApprove}
+                          >
+                            <CheckSquare className="mr-2 h-4 w-4" />
+                            {canApprove ? `Take Action - Step ${nextStep}` : `Pending Step ${nextStep}`}
+                          </Button>
+                        </DialogTrigger>
+                        {canApprove && renderApprovalDialog(initiative)}
+                      </Dialog>
                     </div>
                   </div>
                 </CardContent>
